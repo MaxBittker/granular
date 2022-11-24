@@ -195,6 +195,8 @@ function guiinit(){
 	$('#sample1').click(function(){
 		load();
 	});
+	load();
+
 
 	$('#sample2').click(function(){
 		//loading the sound with XML HTTP REQUEST

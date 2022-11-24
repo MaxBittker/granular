@@ -7,6 +7,10 @@ var buffer, buffer2; //global variables for sample files
 var master = context.createGain();
 master.connect(context.destination);
 
+function map(v, in_min, in_max, out_min, out_max) {
+  return ((v - in_min) * (out_max - out_min)) / (in_max - in_min) + out_min;
+}
+
 //global varuables
 var w, h;
 var data;
@@ -29,7 +33,17 @@ var pan = 0.1;
 var trans = 1;
 
 //the grain class
-function grain(p, buffer, positionx, positiony, attack, release, spread, pan) {
+function grain(
+  canvas,
+  ctx,
+  buffer,
+  positionx,
+  positiony,
+  attack,
+  release,
+  spread,
+  pan
+) {
   var that = this; //for scope issues
   this.now = context.currentTime; //update the time value
   //create the source
@@ -40,12 +54,12 @@ function grain(p, buffer, positionx, positiony, attack, release, spread, pan) {
   this.gain = context.createGain();
 
   //experimenting with adding a panner node - not all the grains will be panned for better performance
-  var yes = parseInt(p.random(3), 10);
+  var yes = Math.floor(Math.random() * 3);
   if (yes === 1) {
     this.panner = context.createPanner();
     this.panner.panningModel = "equalpower";
     this.panner.distanceModel = "linear";
-    this.panner.positionX = p.random(pan * -1, pan);
+    this.panner.positionX = (Math.random() - 0.5) * pan * 2;
     this.panner.positionY = 0;
     this.panner.positionZ = 0;
     //connections
@@ -59,13 +73,12 @@ function grain(p, buffer, positionx, positiony, attack, release, spread, pan) {
 
   //update the position and calcuate the offset
   this.positionx = positionx;
-  this.offset = this.positionx * (buffer.duration / w); //pixels to seconds
+  this.offset = this.positionx * (buffer.duration / canvas.width); //pixels to seconds
 
   //update and calculate the amplitude
   this.positiony = positiony;
-  this.amp = this.positiony / h;
-  this.amp = p.map(this.amp, 0.0, 1.0, 1.0, 0.0) * 0.7;
-
+  this.amp = this.positiony / canvas.height;
+  this.amp = map(this.amp, 0.0, 1.0, 1.0, 0.0) * 0.7;
   //parameters
   this.attack = attack * 0.4;
   this.release = release * 1.5;
@@ -100,24 +113,27 @@ function grain(p, buffer, positionx, positiony, attack, release, spread, pan) {
   }, tms + 200);
 
   //drawing the lines
-  p.stroke(p.random(125) + 125, p.random(250), p.random(250)); //,(this.amp + 0.8) * 255
+  ctx.strokeStyle = `rgb(${Math.random() * 125 + 125}, ${
+    Math.random() * 250
+  }, ${Math.random() * 250})`; //,(this.amp + 0.8) * 255
   //p.strokeWeight(this.amp * 5);
   this.randomoffsetinpixels = this.randomoffset / (buffer.duration / w);
   //p.background();
-  p.line(
-    this.positionx + this.randomoffsetinpixels,
-    0,
-    this.positionx + this.randomoffsetinpixels,
-    p.height
-  );
+
+  ctx.beginPath();
+  ctx.moveTo(this.positionx + this.randomoffsetinpixels, 0);
+  ctx.lineTo(this.positionx + this.randomoffsetinpixels, canvas.height);
+  ctx.stroke();
+
   setTimeout(function () {
-    p.background();
-    p.line(
-      that.positionx + that.randomoffsetinpixels,
-      0,
-      that.positionx + that.randomoffsetinpixels,
-      p.height
-    );
+    // p.background();
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.beginPath();
+    ctx.moveTo(that.positionx + that.randomoffsetinpixels, 0);
+    ctx.lineTo(that.positionx + that.randomoffsetinpixels, canvas.height);
+    ctx.stroke();
+    // p.line();
   }, 200);
 }
 
@@ -127,17 +143,18 @@ function voice(id) {
 }
 
 //play function for mouse event
-voice.prototype.playmouse = function (p) {
+voice.prototype.playmouse = function (canvas, ctx, e) {
   this.grains = [];
   this.grainscount = 0;
   var that = this; //for scope issues
   this.play = function () {
     //create new grain
     var g = new grain(
-      p,
+      canvas,
+      ctx,
       buffer,
-      p.mouseX,
-      p.mouseY,
+      e.clientX,
+      e.clientY,
       attack,
       release,
       spread,
@@ -151,14 +168,14 @@ voice.prototype.playmouse = function (p) {
       that.graincount = 0;
     }
     //next interval
-    this.dens = p.map(density, 1, 0, 0, 1);
+    this.dens = map(density, 1, 0, 0, 1);
     this.interval = this.dens * 500 + 70;
     that.timeout = setTimeout(that.play, this.interval);
   };
   this.play();
 };
 //play function for touch events - this will get the position from touch events
-voice.prototype.playtouch = function (p, positionx, positiony) {
+voice.prototype.playtouch = function (canvas, ctx, positionx, positiony) {
   //this.positiony = positiony;
   this.positionx = positionx;
   this.positiony = positiony;
@@ -168,16 +185,7 @@ voice.prototype.playtouch = function (p, positionx, positiony) {
   var that = this; //for scope issues
   this.play = function () {
     //create new grain
-    var g = new grain(
-      p,
-      buffer,
-      that.positionx,
-      that.positiony,
-      attack,
-      release,
-      spread,
-      pan
-    );
+    var g = new grain(canvas, ctx, buffer, X, Y, attack, release, spread, pan);
 
     //push to the array
     that.grains[that.graincount] = g;
@@ -187,7 +195,7 @@ voice.prototype.playtouch = function (p, positionx, positiony) {
       that.graincount = 0;
     }
     //next interval
-    this.dens = p.map(density, 1, 0, 0, 1);
+    this.dens = map(density, 1, 0, 0, 1);
     this.interval = this.dens * 500 + 70;
     that.timeout = setTimeout(that.play, this.interval);
   };
@@ -211,8 +219,9 @@ request.onload = function () {
       data = buffer.getChannelData(0);
       isloaded = true;
       var canvas1 = document.getElementById("canvas");
+      var ctx = canvas1.getContext("2d");
       //initialize the processing draw when the buffer is ready
-      var processing = new Processing(canvas1, waveformdisplay);
+      waveformdisplay(canvas1, ctx);
     },
     function () {
       console.log("loading failed");
@@ -222,16 +231,19 @@ request.onload = function () {
 request.send();
 
 //processing - waveform display - canvas
-function waveformdisplay(p) {
-  w = parseInt($("#waveform").css("width"), 10); //get the width
-  h = parseInt($("#waveform").css("height"), 10); //get the height
-
+function waveformdisplay(canvas, ctx) {
+  let box = document.getElementById("waveform").getBoundingClientRect();
+  w = box.width; //get the width
+  h = box.height;
+  canvas.width = w;
+  canvas.height = h;
   //draw the buffer
   function drawBuffer() {
     var step = Math.ceil(data.length / w);
     var amp = h / 2;
 
-    p.background(0);
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
     for (var i = 0; i < w; i++) {
       var min = 1.0;
       var max = -1.0;
@@ -245,58 +257,70 @@ function waveformdisplay(p) {
         }
       }
       //p.stroke(p.random(255),p.random(255),p.random(255));
-      p.rect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(i, (1 + min) * amp, 1, Math.max(1, (max - min) * amp));
     }
   }
 
-  p.setup = function () {
-    p.size(w, h);
-    p.background(0); //background black
+  function setup() {
+    canvas.width = w;
+    canvas.height = h;
+    ctx.fillStyle = "#000";
+
+    ctx.fillRect(0, 0, w, h);
 
     //change the size on resize
     $(window).resize(function () {
-      w = parseInt($("#waveform").css("width"), 10);
-      h = parseInt($("#waveform").css("height"), 10);
-      p.size(w, h);
-      //redraw buffer on resize
-      p.stroke(255);
+      let box = document.getElementById("waveform").getBoundingClientRect();
+      w = box.width; //get the width
+      h = box.height;
+
+      canvas.width = w;
+      canvas.height = h;
+      ctx.fillStyle = "#000";
+      ctx.fillRect(0, 0, w, h);
+
       drawBuffer();
     });
-    p.strokeWeight(0.01);
-    p.stroke(255);
+
     drawBuffer();
-    p.noLoop();
-  };
+  }
+  setup();
 }
 
 //processing - grain display and main interaction system
-function grainsdisplay(p) {
-  w = parseInt($("#waveform").css("width"), 10);
-  h = parseInt($("#waveform").css("height"), 10);
+function grainsdisplay(canvas, ctx) {
+  let box = document.getElementById("waveform").getBoundingClientRect();
+  w = box.width; //get the width
+  h = box.height;
 
   //setup
-  p.setup = function () {
-    p.size(w, h);
-    p.background(0, 0); //backgorund black alpha 0
-    p.frameRate(24);
-    p.noLoop();
+  function setup() {
+    canvas.width = w;
+    canvas.height = h;
+    ctx.clearRect(0, 0, w, h);
+    // p.frameRate(24);
+    // p.noLoop();
 
     //change the size on resize
     $(window).resize(function () {
-      w = parseInt($("#waveform").css("width"), 10);
-      h = parseInt($("#waveform").css("height"), 10);
-      p.size(w, h);
+      let box = document.getElementById("waveform").getBoundingClientRect();
+      w = box.width; //get the width
+      h = box.height;
+      canvas.width = w;
+      canvas.height = h;
+      ctx.clearRect(0, 0, w, h);
     });
-  };
-
+  }
+  setup();
   //mouse events
   $("#canvas2")
-    .mousedown(function () {
+    .mousedown(function (e) {
       mouseState = true;
 
       if (mouseState) {
         var v = new voice();
-        v.playmouse(p);
+        v.playmouse(canvas, ctx, e);
         voicesmono[0] = v; //have in the array
       }
     })
@@ -307,12 +331,12 @@ function grainsdisplay(p) {
         voicesmono.splice(i);
       }
       setTimeout(function () {
-        p.background();
+        ctx.clearRect(0, 0, w, h);
       }, 300);
     })
-    .mousemove(function () {
-      X = p.mouseX;
-      Y = p.mouseY;
+    .mousemove(function (e) {
+      X = e.clientX;
+      Y = e.clientY;
     });
   //safety for when the mouse is out of the canvas
   $(document).mousemove(function (e) {
@@ -321,7 +345,7 @@ function grainsdisplay(p) {
         voicesmono[i].stop();
         voicesmono.splice(i);
         setTimeout(function () {
-          p.background();
+          ctx.clearRect(0, 0, w, h);
         }, 300);
       }
     }
@@ -345,13 +369,13 @@ function grainsdisplay(p) {
           var interval;
           //calculate the reverse interval
           if (event.touches.length > 1) {
-            interval = p.map(density, 0, 1, 1, 0.7);
+            interval = map(density, 0, 1, 1, 0.7);
           } else {
-            interval = p.map(density, 0, 1, 1, 0);
+            interval = map(density, 0, 1, 1, 0);
           }
 
           //play
-          v.playtouch(p, clientX, clientY, interval);
+          v.playtouch(canvas, ctx, clientX, clientY, interval);
           voices.push(v);
         }
       }
@@ -374,7 +398,7 @@ function grainsdisplay(p) {
       }
       voices = [];
       setTimeout(function () {
-        p.background();
+        ctx.clearRect(0, 0, w, h);
       }, 200);
     }
   });
@@ -402,7 +426,9 @@ $(document).ready(function () {
   window.history.pushState(null, null, "");
   //grain display init
   var canvas2 = document.getElementById("canvas2");
-  var processing = new Processing(canvas2, grainsdisplay);
+
+  var ctx = canvas2.getContext("2d");
+  grainsdisplay(canvas2, ctx);
 
   document.addEventListener("touchmove", function (e) {
     e.preventDefault();
